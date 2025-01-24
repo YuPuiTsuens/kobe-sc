@@ -39,7 +39,7 @@ contract Airdrop is Ownable {
     function claimWithSignature(uint256 amount, string calldata profile, uint256 subCount, bytes calldata signature) external {
         require(!claimed[msg.sender], 'Already claimed');
         require(!claimedProfiles[profile], 'Profile already claimed');
-        require(token.balanceOf(address(this)) >= amount, 'Insufficient balance');
+        require(token.balanceOf(address(this)) >= amount * 1e18, 'Insufficient balance');
         require(amount == subCount, 'Amount must match sub count');
 
         // Verify signature
@@ -50,9 +50,9 @@ contract Airdrop is Ownable {
 
         claimed[msg.sender] = true;
         claimedProfiles[profile] = true;
-        require(token.transfer(msg.sender, amount), 'Transfer failed');
+        require(token.transfer(msg.sender, amount * 1e18), 'Transfer failed');
 
-        emit AirdropClaimed(msg.sender, amount, profile, subCount);
+        emit AirdropClaimed(msg.sender, amount * 1e18, profile, subCount);
     }
 
     // Allow owner to withdraw remaining tokens
