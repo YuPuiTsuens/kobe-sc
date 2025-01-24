@@ -16,16 +16,12 @@ contract Airdrop is Ownable {
     mapping(string => bool) public claimedProfiles;
     mapping(address => bool) public claimed;
 
-    // Amount of tokens each address can claim
-    uint256 public airdropAmount;
-
     address public signerAddress;
 
     event AirdropClaimed(address indexed user, uint256 amount, string profile, uint256 subCount);
 
-    constructor(address _token, uint256 _airdropAmount, address _signerAddress) Ownable(msg.sender) {
+    constructor(address _token, address _signerAddress) Ownable(msg.sender) {
         token = IERC20(_token);
-        airdropAmount = _airdropAmount;
         signerAddress = _signerAddress;
     }
 
@@ -57,11 +53,6 @@ contract Airdrop is Ownable {
         require(token.transfer(msg.sender, amount), 'Transfer failed');
 
         emit AirdropClaimed(msg.sender, amount, profile, subCount);
-    }
-
-    // Update amount of tokens each address can claim
-    function setAirdropAmount(uint256 _amount) external onlyOwner {
-        airdropAmount = _amount;
     }
 
     // Allow owner to withdraw remaining tokens
