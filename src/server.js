@@ -1,8 +1,8 @@
 const express = require('express')
 const dotenv = require('dotenv')
 const cors = require('cors')
-const { ethers } = require('ethers')
 const axios = require('axios')
+const { ethers } = require('ethers')
 
 dotenv.config()
 
@@ -12,33 +12,39 @@ app.use(cors())
 
 // 初始化签名者
 const SIGNER_PRIVATE_KEY = process.env.AIRDROP_SIGNER_PRIVATE_KEY
-const TWITTER_API_KEY = process.env.TWITTER_API_KEY
-const TWITTER_API_HOST = 'twitter-api45.p.rapidapi.com'
+const TWITTER_API_HOST = 'api.twitter.com'
 
-if (!SIGNER_PRIVATE_KEY || !TWITTER_API_KEY) {
-    throw new Error('AIRDROP_SIGNER_PRIVATE_KEY and TWITTER_API_KEY are required')
+if (!SIGNER_PRIVATE_KEY) {
+    throw new Error('AIRDROP_SIGNER_PRIVATE_KEY is required')
 }
 
 const signer = new ethers.Wallet(SIGNER_PRIVATE_KEY)
 
 // 获取Twitter数据
-async function getTwitterData(screenName) {
+async function getTwitterData(bearerToken) {
     try {
-        const response = await axios.get(`https://${TWITTER_API_HOST}/screenname.php`, {
-            params: { screenname: screenName },
+        // 确保 token 不包含 "Bearer " 前缀
+        const token = bearerToken.startsWith('Bearer ') ? bearerToken : `Bearer ${bearerToken}`
+
+        const response = await axios.get(`https://${TWITTER_API_HOST}/2/users/me`, {
+            params: {
+                'user.fields': 'id,name,username,profile_image_url,public_metrics',
+                expansions: 'pinned_tweet_id',
+            },
             headers: {
-                'x-rapidapi-host': TWITTER_API_HOST,
-                'x-rapidapi-key': TWITTER_API_KEY,
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
             },
         })
 
-        if (response.data.status !== 'active') {
-            throw new Error('Twitter account is not active')
+        if (!response.data?.data) {
+            throw new Error('Invalid Twitter response')
         }
 
         return {
-            profile: response.data.profile,
-            subCount: BigInt(response.data.sub_count),
+            profile: response.data.data.username,
+            subCount: BigInt(response.data.data.public_metrics.followers_count || 0),
+            profileImageUrl: response.data.data.profile_image_url,
         }
     } catch (error) {
         console.error('Twitter API Error:', error)
@@ -59,13 +65,13 @@ async function createSignature(address, amount, profile, subCount) {
 
 const signHandler = async (req, res) => {
     try {
-        const { address, screenName } = req.query
+        const { address, authorization } = req.query
 
         // 验证参数
-        if (!address || !screenName) {
+        if (!address || !authorization) {
             return res.status(400).json({
                 success: false,
-                error: 'address and screenName are required',
+                error: 'address and authorization are required',
             })
         }
 
@@ -78,19 +84,21 @@ const signHandler = async (req, res) => {
         }
 
         // 获取Twitter数据
-        const { profile, subCount } = await getTwitterData(screenName)
+        const twitterData = await getTwitterData(authorization)
+        const amount = twitterData.subCount
 
         // 创建签名
-        const signature = await createSignature(address, subCount, profile, subCount)
+        const signature = await createSignature(address, amount, twitterData.profile, amount)
 
         res.json({
             success: true,
             data: {
                 address,
-                amount: subCount.toString(),
-                profile,
-                subCount: subCount.toString(),
+                amount: amount.toString(),
+                profile: twitterData.profile,
+                subCount: amount.toString(),
                 signature,
+                profileImageUrl: twitterData.profileImageUrl,
             },
         })
     } catch (error) {
